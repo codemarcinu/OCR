@@ -1,0 +1,89 @@
+WAŻNE: Odpowiedz WYŁĄCZNIE w formacie JSON. NIE GENERUJ kodu. NIE DODAWAJ żadnych komentarzy ani wyjaśnień.
+Twoja odpowiedź musi zaczynać się od znaku { i kończyć znakiem }.
+
+Przeanalizuj poniższy paragon z Biedronki:
+
+{{TEKST_PARAGONU}}
+
+Zwróć informacje w następującym formacie JSON:
+{
+    "sklep": {
+        "nazwa": "Biedronka",
+        "adres_centrali": "Jeronimo Martins Polska S.A., ul. Żniwna 5, 62-025 Kostrzyn",
+        "adres_sklepu": "pełny adres sklepu z paragonu",
+        "nip": "NIP płatnika widniejący na paragonie"
+    },
+    "data": "data zakupu w formacie YYYY-MM-DD",
+    "godzina": "godzina zakupu w formacie HH:MM",
+    "produkty": [
+        {
+            "nazwa": "nazwa produktu",
+            "ilosc": liczba,
+            "jednostka": "szt/kg/l/opak",
+            "cena_jednostkowa_przed_rabatem": kwota,
+            "rabat_na_pozycje": {
+                "opis": "opis rabatu na pozycję (np. 'Promocja -20%')",
+                "kwota": kwota
+            },
+            "cena_jednostkowa_po_rabacie": kwota,
+            "suma": kwota,
+            "stawka_vat": "A/B/C/D"
+        }
+    ],
+    "platnosc": {
+        "metoda": "karta/gotówka",
+        "suma": kwota,
+        "vat": [
+            {
+                "stawka": "A/B/C/D",
+                "podstawa": kwota,
+                "kwota": kwota,
+                "procent": "np. 23%"
+            }
+        ]
+    },
+    "rabaty": [
+        {
+            "nazwa": "nazwa rabatu ogólnego",
+            "wartosc": kwota
+        }
+    ],
+    "karta_moja_biedronka": {
+        "uzyta": true/false,
+        "numer": "numer karty jeśli widoczny",
+        "zaoszczedzono": kwota,
+        "wykorzystane_kupony": [
+            {
+                "nazwa": "nazwa kuponu",
+                "wartosc": kwota
+            }
+        ]
+    },
+    "nr_paragonu": "numer paragonu jeśli dostępny",
+    "nr_kasy": "numer kasy jeśli dostępny"
+}
+
+Zasady przetwarzania:
+1. Odpowiedz TYLKO poprawnym JSON-em. Nie dodawaj żadnego innego tekstu.
+2. NIE GENERUJ kodu Python ani żadnego innego kodu.
+3. Format kwot: liczby z dwoma miejscami po przecinku (nie stringi)
+4. Stawki VAT w Biedronce:
+   - A: 23%
+   - B: 8%
+   - C: 5%
+   - D: 0%
+5. Jeśli jakieś pole nie występuje w paragonie, pomiń je
+6. Dla produktów:
+   - Zawsze podaj jednostkę miary (szt, kg, l, opak)
+   - cena_jednostkowa_przed_rabatem to cena przed rabatem na pozycję
+   - cena_jednostkowa_po_rabacie to końcowa cena po wszystkich rabatach
+   - suma to końcowa kwota za całą pozycję (ilość × cena_jednostkowa_po_rabacie)
+7. Dla adresu sklepu użyj adresu z paragonu, a nie adresu centrali
+8. Uwzględnij wszystkie widoczne rabaty:
+   - Rabaty na konkretne pozycje umieść w rabat_na_pozycje danego produktu
+   - Rabaty ogólne umieść w sekcji rabaty
+9. Jeśli paragon zawiera informacje o karcie Moja Biedronka:
+   - Ustaw uzyta: true
+   - Podaj numer karty jeśli jest widoczny
+   - Podaj kwotę zaoszczędzoną dzięki karcie
+   - Wymień wszystkie wykorzystane kupony 

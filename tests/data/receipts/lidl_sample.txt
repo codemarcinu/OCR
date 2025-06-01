@@ -1,0 +1,39 @@
+LIDL Sp. z o.o. sp.k.
+ul. Poznańska 48, Jankowice
+62-080 Tarnowo Podgórne
+NIP: 781-18-45-999
+
+Miejsce zakupu:
+LIDL
+ul. Testowa 123
+00-000 Warszawa
+
+Data: 01.01.2024 12:34
+Paragon fiskalny nr 1234/567/89
+
+MLEKO UHT 3.2% 1L      3.99 A
+CHLEB WIEJSKI 500G     4.50 B
+MASŁO EXTRA 200G       6.99 A
+JABŁKA LUZ 1KG         2.99 B
+JOGURT NATURALNY 400G  2.49 A
+WODA MINERALNA 1.5L    1.99 A
+BANAN LUZ 0.876KG      4.38 B
+
+Suma PLN              27.33
+
+PTU A 23%             20.45  4.70
+PTU B  8%              6.88  0.55
+
+Karta płatnicza       27.33
+
+Nr karty: ************1234
+Nr terminala: TERM123456
+Nr transakcji: TRX789012
+
+Zaoszczędzono z Lidl Plus: 2.50
+Wykorzystane kupony:
+- Rabat 10% na nabiał: -1.35
+- Owoce 20% taniej: -1.15
+
+Nr kasy: 3
+Kasjer: Jan 

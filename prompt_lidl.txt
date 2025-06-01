@@ -1,0 +1,51 @@
+WAŻNE: Odpowiedz WYŁĄCZNIE w formacie JSON. NIE GENERUJ kodu. NIE DODAWAJ żadnych komentarzy ani wyjaśnień.
+
+Przeanalizuj poniższy paragon z Lidla i zwróć dane w następującym formacie:
+
+{
+    "sklep": {
+        "nazwa": "string",
+        "adres_sklepu": "string",
+        "nip": "string"
+    },
+    "data": "string (YYYY-MM-DD)",
+    "produkty": [
+        {
+            "nazwa": "string",
+            "ilosc": "number",
+            "jednostka": "string",
+            "cena_jednostkowa_przed_rabatem": "number",
+            "suma": "number",
+            "stawka_vat": "string"
+        }
+    ],
+    "platnosc": {
+        "metoda": "string (karta/gotówka)",
+        "suma": "number",
+        "vat": [
+            {
+                "stawka": "string",
+                "podstawa": "number",
+                "kwota": "number",
+                "procent": "string"
+            }
+        ]
+    }
+}
+
+Zasady przetwarzania:
+1. Odpowiedz TYLKO poprawnym JSON-em
+2. NIE GENERUJ kodu
+3. Format kwot: liczby z dwoma miejscami po przecinku
+4. Jeśli jakieś pole nie występuje w paragonie, pomiń je
+5. Zawsze podaj jednostkę miary (szt/kg/l/opak)
+6. cena_jednostkowa_przed_rabatem to cena przed rabatem na pozycję
+7. suma to końcowa kwota za całą pozycję
+8. Stawki VAT:
+   - A: 23%
+   - B: 8%
+   - C: 5%
+   - D: 0%
+
+Tekst paragonu:
+{{TEKST_PARAGONU}} 
