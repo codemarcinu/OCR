@@ -17,7 +17,7 @@ import re
 import logging
 from pathlib import Path
 from typing import Optional, Tuple, Dict, List
-import pytesseract
+from paddleocr import PaddleOCR, PPStructureV3
 from PIL import Image
 from pdf2image import convert_from_path
 import fitz
@@ -27,34 +27,18 @@ from datetime import datetime
 import cv2
 import numpy as np
 from PIL import Image, ImageEnhance
-
-# Konfiguracja logowania
-logging.basicConfig(
-    level=logging.DEBUG,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
-logger = logging.getLogger(__name__)
-
-try:
-    import pytesseract
-    from PIL import Image
-except ImportError:
-    print("Biblioteki Pytesseract lub Pillow nie są zainstalowane. OCR dla obrazów nie będzie działać.")
-    print("Zainstaluj je używając: pip install pytesseract pillow")
-    pytesseract = None
-    Image = None
-
-try:
-    import fitz  # PyMuPDF
-except ImportError:
-    print("Biblioteka PyMuPDF (fitz) nie jest zainstalowana. OCR dla PDF nie będzie działać.")
-    print("Zainstaluj ją używając: pip install PyMuPDF")
-    fitz = None
+from receipt_structure import ReceiptStructureAnalyzer
 
 # Domyślne ustawienia
 DEFAULT_OLLAMA_MODEL = "SpeakLeash/bielik-11b-v2.3-instruct:Q6_K"
 DEFAULT_OLLAMA_URL = "http://localhost:11434/api/generate"
 DEFAULT_SYSTEM_PROMPT_FILE = "prompt_dla_bielik.txt"
+
+# Konfiguracja OCR
+OCR_CONFIG = {
+    'lang': 'pl',  # Polski język
+    'use_textline_orientation': True,  # Orientacja linii tekstu
+}
 
 # Wzorce dla rozpoznawania sklepów
 STORE_PATTERNS = {
@@ -94,214 +78,194 @@ STORE_PATTERNS = {
     }
 }
 
+# Konfiguracja logowania
+logging.basicConfig(
+    level=logging.DEBUG,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
+
+# Inicjalizacja PaddleOCR z konfiguracją
+ocr = PaddleOCR(**OCR_CONFIG)
+
 def _preprocess_image(image):
     """
-    Preprocessuje obraz dla lepszych wyników OCR.
+    Przetwarza obraz paragonu przed OCR.
     
     Args:
-        image: PIL Image object
+        image: Obraz w formacie numpy array (BGR)
         
     Returns:
-        Preprocessed PIL Image object
+        Przetworzony obraz w formacie numpy array (RGB)
     """
-    import cv2
-    import numpy as np
-    from PIL import Image, ImageEnhance
-    
-    # Konwertuj do OpenCV
-    img = cv2.cvtColor(np.array(image), cv2.COLOR_RGB2BGR)
-    
-    # Przeskaluj obraz do większego rozmiaru
-    scale_factor = 3.0  # Zwiększamy skalę dla lepszej rozdzielczości
-    width = int(img.shape[1] * scale_factor)
-    height = int(img.shape[0] * scale_factor)
-    img = cv2.resize(img, (width, height), interpolation=cv2.INTER_CUBIC)
-    
-    # Konwertuj do skali szarości
-    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-    
-    # Zwiększ kontrast
-    clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8,8))
-    gray = clahe.apply(gray)
-    
-    # Usuń szum
-    denoised = cv2.fastNlMeansDenoising(gray, h=10)  # Zmniejszamy parametr h dla zachowania detali
-    
-    # Binaryzacja adaptacyjna
-    binary = cv2.adaptiveThreshold(
-        denoised,
-        255,
-        cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
-        cv2.THRESH_BINARY,
-        15,  # Mniejszy rozmiar bloku dla lepszego rozpoznawania małego tekstu
-        8    # Mniejsza stała C dla lepszego kontrastu
-    )
-    
-    # Morfologia - usuwanie małych artefaktów
-    kernel = np.ones((1,1), np.uint8)  # Mniejszy kernel dla zachowania małego tekstu
-    binary = cv2.morphologyEx(binary, cv2.MORPH_CLOSE, kernel)
-    
-    # Deskew jeśli potrzebne
-    coords = np.column_stack(np.where(binary > 0))
-    if len(coords) > 0:  # Sprawdź czy są jakieś białe piksele
-        angle = cv2.minAreaRect(coords)[-1]
-        if angle < -45:
-            angle = 90 + angle
-        center = tuple(np.array(binary.shape[1::-1]) / 2)
-        rot_mat = cv2.getRotationMatrix2D(center, angle, 1.0)
-        binary = cv2.warpAffine(
-            binary,
-            rot_mat,
-            binary.shape[1::-1],
-            flags=cv2.INTER_CUBIC,
-            borderMode=cv2.BORDER_REPLICATE
+    try:
+        # 1. Konwersja do skali szarości
+        gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+        
+        # 2. Normalizacja kontrastu
+        clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8,8))
+        gray = clahe.apply(gray)
+        
+        # 3. Redukcja szumu z zachowaniem krawędzi
+        denoised = cv2.fastNlMeansDenoising(gray, h=10)
+        
+        # 4. Adaptacyjne progowanie
+        binary = cv2.adaptiveThreshold(
+            denoised,
+            255,
+            cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
+            cv2.THRESH_BINARY,
+            21,  # Rozmiar bloku
+            11   # Stała C
         )
-    
-    # Konwertuj z powrotem do PIL
-    processed = Image.fromarray(binary)
-    
-    # Zwiększ ostrość
-    enhancer = ImageEnhance.Sharpness(processed)
-    processed = enhancer.enhance(1.5)  # Zmniejszamy wzmocnienie ostrości
-    
-    # Zwiększ kontrast
-    enhancer = ImageEnhance.Contrast(processed)
-    processed = enhancer.enhance(1.5)  # Zmniejszamy wzmocnienie kontrastu
-    
-    return processed
+        
+        # 5. Morfologiczne czyszczenie
+        kernel = np.ones((2,2), np.uint8)
+        cleaned = cv2.morphologyEx(binary, cv2.MORPH_CLOSE, kernel)
+        
+        # 6. Skalowanie obrazu z zachowaniem proporcji
+        max_size = 2880  # Maksymalny wymiar zgodny z OCR_CONFIG
+        height, width = cleaned.shape[:2]
+        scale = min(max_size / width, max_size / height)
+        
+        if scale < 1:
+            new_width = int(width * scale)
+            new_height = int(height * scale)
+            scaled = cv2.resize(cleaned, (new_width, new_height), interpolation=cv2.INTER_AREA)
+        else:
+            scaled = cleaned
+        
+        # 7. Konwersja do RGB dla OCR
+        rgb = cv2.cvtColor(scaled, cv2.COLOR_GRAY2RGB)
+        
+        # 8. Poprawa ostrości
+        pil_img = Image.fromarray(rgb)
+        enhancer = ImageEnhance.Sharpness(pil_img)
+        sharpened = enhancer.enhance(1.5)  # Współczynnik wyostrzenia
+        
+        # 9. Konwersja z powrotem do numpy array
+        result = np.array(sharpened)
+        
+        return result
+        
+    except Exception as e:
+        logger.error(f"Błąd podczas przetwarzania obrazu: {str(e)}")
+        # Jeśli coś pójdzie nie tak, zwróć oryginalny obraz
+        return cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
 
-def extract_text_from_file(file_path: Path) -> str:
+def extract_text_from_file(file_path: Path, args) -> Tuple[str, Dict]:
     """
-    Ekstrahuje tekst z pliku (PDF lub obraz).
+    Ekstrahuje tekst z pliku obrazu lub PDF.
     
     Args:
         file_path: Ścieżka do pliku
+        args: Argumenty z linii poleceń
         
     Returns:
-        Wyekstrahowany tekst
+        Tuple zawierający wyekstrahowany tekst i dane strukturalne
     """
     try:
+        # Inicjalizacja analizatora struktury
+        structure_analyzer = ReceiptStructureAnalyzer(
+            save_folder=args.output if args.output else './output'
+        )
+        
         if file_path.suffix.lower() == '.pdf':
-            text = _extract_text_from_pdf(file_path)
+            # Konwersja PDF do obrazów
+            images = convert_from_path(file_path)
+            text_results = []
+            structure_results = []
+            
+            for page_num, image in enumerate(images, 1):
+                # Konwersja do numpy array
+                image_np = np.array(image)
+                
+                # Przetwarzanie obrazu
+                processed_image = _preprocess_image(image_np)
+                
+                # OCR na przetworzonym obrazie
+                result = ocr.ocr(processed_image)
+                
+                # Analiza strukturalna
+                structure_data = structure_analyzer.analyze_receipt(
+                    processed_image,
+                    save_visualization=args.debug
+                )
+                
+                if result and result[0]:
+                    # Sortowanie wyników po pozycji y
+                    sorted_results = sorted(result[0], key=lambda x: x[0][0][1])
+                    
+                    # Ekstrakcja tekstu
+                    page_text = []
+                    for line in sorted_results:
+                        text = line[1][0]
+                        confidence = line[1][1]
+                        
+                        if confidence >= OCR_CONFIG['min_text_score']:
+                            page_text.append(text)
+                    
+                    text_results.append('\n'.join(page_text))
+                    structure_results.append(structure_data)
+                    
+                    # Debug output
+                    if args.debug:
+                        debug_file = file_path.with_name(f"{file_path.stem}_page{page_num}_ocr.txt")
+                        with open(debug_file, 'w', encoding='utf-8') as f:
+                            json.dump({
+                                'text': page_text,
+                                'structure': structure_data
+                            }, f, indent=2, ensure_ascii=False)
+            
+            return '\n'.join(text_results), structure_results[0] if structure_results else {}
+            
         else:
-            text = _extract_text_from_image(file_path)
+            # Wczytanie i przetworzenie obrazu
+            image = cv2.imread(str(file_path))
+            if image is None:
+                raise ValueError(f"Nie można wczytać obrazu: {file_path}")
+                
+            processed_image = _preprocess_image(image)
             
-        if text.strip():
-            logger.info(f"Pomyślnie wykonano OCR na obrazie: {file_path}")
-            logger.debug("Wyekstrahowany tekst:")
-            logger.debug("-" * 80)
-            logger.debug(text)
-            logger.debug("-" * 80)
-            logger.debug(f"Długość tekstu: {len(text)} znaków")
+            # OCR
+            result = ocr.ocr(processed_image)
             
-            # Log OCR output to file for debugging
-            debug_file = file_path.parent / f"{file_path.stem}_ocr.txt"
-            debug_file.write_text(text, encoding='utf-8')
-            logger.debug(f"Zapisano tekst OCR do: {debug_file}")
-            
-            return text
-        else:
-            raise Exception("Wyekstrahowany tekst jest pusty")
-            
-    except Exception as e:
-        logger.error(f"Błąd podczas ekstrakcji tekstu z pliku {file_path}: {str(e)}")
-        raise
-
-def _extract_text_from_pdf(file_path: Path) -> str:
-    """
-    Ekstrahuje tekst z pliku PDF, próbując różne metody.
-    """
-    text = ""
-    
-    try:
-        # 1. Próba bezpośredniego wydobycia tekstu z PDF
-        pdf_doc = fitz.open(file_path)
-        for page in pdf_doc:
-            text += page.get_text()
-        pdf_doc.close()
-        
-        if text.strip():
-            logger.info(f"Pomyślnie wyekstrahowano tekst z PDF: {file_path}")
-            return text
-            
-        # 2. Jeśli nie ma tekstu, konwertujemy na obrazy i używamy OCR
-        logger.info(f"PDF {file_path} nie zawiera warstwy tekstowej, używam OCR...")
-        
-        # Konwertuj PDF na obrazy z wyższą rozdzielczością
-        images = convert_from_path(
-            file_path,
-            dpi=300,  # Wyższa rozdzielczość dla lepszej jakości OCR
-            grayscale=True  # Konwersja do skali szarości dla lepszego OCR
-        )
-        
-        # Użyj OCR na każdej stronie
-        text = ""
-        for i, image in enumerate(images, 1):
-            # Popraw kontrast obrazu
-            image = image.convert('L')  # Konwersja do skali szarości
-            image = image.point(lambda x: 0 if x < 128 else 255, '1')  # Binaryzacja
-            
-            # Wykonaj OCR z dodatkowymi parametrami
-            page_text = pytesseract.image_to_string(
-                image,
-                lang='pol',
-                config='--psm 6'  # Tryb segmentacji strony: zakładamy jednolity blok tekstu
+            # Analiza strukturalna
+            structure_data = structure_analyzer.analyze_receipt(
+                processed_image,
+                save_visualization=args.debug
             )
             
-            text += page_text + "\n"
-            logger.info(f"Wykonano OCR na stronie {i} z PDF: {file_path}")
-        
-        if not text.strip():
-            raise Exception("Nie udało się wyekstrahować tekstu żadną metodą")
+            if result and result[0]:
+                # Sortowanie i ekstrakcja tekstu
+                sorted_results = sorted(result[0], key=lambda x: x[0][0][1])
+                text_results = []
+                
+                for line in sorted_results:
+                    text = line[1][0]
+                    confidence = line[1][1]
+                    
+                    if confidence >= OCR_CONFIG['min_text_score']:
+                        text_results.append(text)
+                
+                text = '\n'.join(text_results)
+                
+                # Debug output
+                if args.debug:
+                    debug_file = file_path.with_name(f"{file_path.stem}_ocr.txt")
+                    with open(debug_file, 'w', encoding='utf-8') as f:
+                        json.dump({
+                            'text': text_results,
+                            'structure': structure_data
+                        }, f, indent=2, ensure_ascii=False)
+                
+                return text, structure_data
             
-        return text
-        
+            return "", {}
+            
     except Exception as e:
-        logger.error(f"Błąd podczas przetwarzania PDF {file_path}: {str(e)}")
-        raise
-
-def _extract_text_from_image(file_path: Path) -> str:
-    """
-    Ekstrahuje tekst z pliku obrazu.
-    
-    Args:
-        file_path: Ścieżka do pliku obrazu
-        
-    Returns:
-        Wyekstrahowany tekst
-    """
-    try:
-        # Wczytaj obraz
-        image = Image.open(file_path)
-        
-        # Preprocessuj obraz
-        processed_image = _preprocess_image(image)
-        
-        # Wykonaj OCR z dodatkowymi parametrami
-        text = pytesseract.image_to_string(
-            processed_image,
-            lang='pol',
-            config='--psm 6 --oem 3'  # Tryb segmentacji strony i silnik OCR
-        )
-        
-        if not text.strip():
-            # Spróbuj ponownie z oryginalnym obrazem
-            logger.warning("OCR nie zwrócił tekstu dla przetworzonego obrazu, próbuję z oryginałem")
-            text = pytesseract.image_to_string(
-                image,
-                lang='pol',
-                config='--psm 6 --oem 3'
-            )
-            
-        if not text.strip():
-            raise OCRError("OCR nie zwrócił żadnego tekstu")
-            
-        logger.info(f"Pomyślnie wykonano OCR na obrazie: {file_path}")
-        return text
-        
-    except Exception as e:
-        logger.error(f"Błąd podczas OCR obrazu {file_path}: {str(e)}")
-        raise
+        logger.error(f"Błąd podczas ekstrakcji tekstu z {file_path}: {str(e)}")
+        raise OCRError(f"Błąd OCR: {str(e)}")
 
 def load_system_prompt(prompt_file: Path) -> str:
     """
@@ -391,7 +355,7 @@ def _validate_and_repair_json(response_text: str) -> str:
         parsed = json.loads(text)
         
         # Sprawdź wymagane pola
-        required_fields = ['data', 'sklep', 'produkty', 'platnosc']
+        required_fields = ['sklep', 'dataZakupu', 'godzinaZakupu', 'sumaCalkowita', 'metodaPlatnosci', 'pozycje', 'vat']
         missing_fields = [field for field in required_fields if field not in parsed]
         
         if missing_fields:
@@ -402,23 +366,23 @@ def _validate_and_repair_json(response_text: str) -> str:
             )
             
         # Sprawdź i napraw pola numeryczne
-        if 'produkty' in parsed:
-            for produkt in parsed['produkty']:
-                for field in ['ilosc', 'cena_jednostkowa_przed_rabatem', 'suma']:
-                    if field in produkt and isinstance(produkt[field], str):
+        if 'pozycje' in parsed:
+            for pozycja in parsed['pozycje']:
+                for field in ['ilosc', 'cenaJednostkowaOryginalna', 'cenaJednostkowaPoRabacie', 'wartoscPozycji']:
+                    if field in pozycja and isinstance(pozycja[field], str):
                         try:
-                            produkt[field] = float(produkt[field].replace(',', '.'))
+                            pozycja[field] = float(pozycja[field].replace(',', '.'))
                         except (ValueError, TypeError):
                             logger.warning(f"Nie udało się przekonwertować pola {field} na liczbę")
                             
         # Sprawdź i napraw daty
-        if 'data' in parsed and not re.match(r'^\d{4}-\d{2}-\d{2}$', parsed['data']):
+        if 'dataZakupu' in parsed and not re.match(r'^\d{4}-\d{2}-\d{2}$', parsed['dataZakupu']):
             try:
                 # Próba parsowania różnych formatów daty
                 for fmt in ['%d.%m.%Y', '%Y.%m.%d', '%d-%m-%Y']:
                     try:
-                        date_obj = datetime.strptime(parsed['data'], fmt)
-                        parsed['data'] = date_obj.strftime('%Y-%m-%d')
+                        date_obj = datetime.strptime(parsed['dataZakupu'], fmt)
+                        parsed['dataZakupu'] = date_obj.strftime('%Y-%m-%d')
                         break
                     except ValueError:
                         continue
@@ -1609,124 +1573,33 @@ def _validate_and_repair_cashier(receipt_data: Dict) -> Dict:
             del receipt_data['kasjer']
         return receipt_data
 
-def process_receipt(file_path: Path, prompt_file: Path, model: str, url: str) -> Dict:
+def process_receipt(file_path: Path, args) -> Dict:
     """
-    Przetwarza paragon i zwraca dane w formacie JSON.
+    Przetwarza paragon i zwraca wyekstrahowane informacje.
     
     Args:
-        file_path: Ścieżka do pliku paragonu
-        prompt_file: Ścieżka do pliku z promptem
-        model: Nazwa modelu do użycia
-        url: URL serwera Ollama
+        file_path: Ścieżka do pliku z paragonem
+        args: Argumenty z linii poleceń
         
     Returns:
-        Słownik z danymi paragonu
+        Słownik z wyekstrahowanymi informacjami
     """
-    processing_start = time.time()
-    
     try:
-        # 1. Ekstrakcja tekstu
-        start_time = time.time()
-        receipt_text = extract_text_from_file(file_path)
-        ocr_time = time.time() - start_time
+        # Ekstrakcja tekstu i danych strukturalnych
+        receipt_text, structure_data = extract_text_from_file(file_path, args)
         
-        # Log OCR output
-        logger.debug("OCR output:")
-        logger.debug("-" * 80)
-        logger.debug(receipt_text)
-        logger.debug("-" * 80)
+        # Analiza tekstu
+        result = analyze_receipt_products(
+            products=receipt_text,
+            receipt_text=receipt_text,
+            ollama_url=args.url,
+            model=args.model
+        )
         
-        # 2. Wykryj sklep
-        store_id, store_confidence = detect_store(receipt_text)
+        # Dodanie danych strukturalnych do wyniku
+        result['structure'] = structure_data
         
-        # 3. Wybierz prompt
-        prompt_text, used_prompt_file = get_store_prompt(store_id, prompt_file)
-        
-        # 4. Wstaw tekst paragonu do promptu
-        prompt_text = prompt_text.replace('{{TEKST_PARAGONU}}', receipt_text)
-        
-        # Log prompt
-        logger.debug("Prompt:")
-        logger.debug("-" * 80)
-        logger.debug(prompt_text)
-        logger.debug("-" * 80)
-        
-        # 5. Wyślij zapytanie do modelu
-        start_time = time.time()
-        response_text = query_ollama(url, model, prompt_text)
-        model_time = time.time() - start_time
-        
-        # Log model response
-        logger.debug("Model response:")
-        logger.debug("-" * 80)
-        logger.debug(response_text)
-        logger.debug("-" * 80)
-        
-        # 6. Parsuj odpowiedź JSON
-        receipt_data = json.loads(response_text)
-        
-        # 7. Waliduj i napraw dane sklepu
-        receipt_data = _validate_and_repair_store(receipt_data, store_id)
-        
-        # 8. Waliduj i napraw dane VAT
-        if 'platnosc' in receipt_data and 'vat' in receipt_data['platnosc']:
-            receipt_data['platnosc']['vat'] = _validate_and_repair_vat(receipt_data['platnosc']['vat'])
-        
-        # 9. Waliduj i napraw dane płatności
-        if 'platnosc' in receipt_data:
-            receipt_data['platnosc'] = _validate_and_repair_payment(receipt_data['platnosc'])
-        
-        # 10. Waliduj i napraw dane daty i godziny
-        receipt_data = _validate_and_repair_datetime(receipt_data)
-        
-        # 11. Waliduj i napraw dane karty lojalnościowej
-        receipt_data = _validate_and_repair_loyalty_card(receipt_data)
-        
-        # 12. Waliduj i napraw dane kuponów
-        receipt_data = _validate_and_repair_coupons(receipt_data)
-        
-        # 13. Waliduj i napraw dane produktów
-        receipt_data = _validate_and_repair_products(receipt_data)
-        
-        # 14. Waliduj i napraw dane numerów kontrolnych
-        receipt_data = _validate_and_repair_control_numbers(receipt_data)
-        
-        # 15. Waliduj i napraw dane kasjera
-        receipt_data = _validate_and_repair_cashier(receipt_data)
-        
-        # 16. Wzbogać dane o analizę produktów
-        try:
-            if 'produkty' in receipt_data:
-                enriched_products = analyze_receipt_products(
-                    receipt_data['produkty'],
-                    receipt_text,
-                    url,
-                    model
-                )
-                receipt_data['produkty'] = enriched_products
-            
-            # 17. Dodaj metadane
-            receipt_data['metadata'] = {
-                'source_file': str(file_path),
-                'file_size': file_path.stat().st_size,
-                'detected_store': store_id,
-                'store_confidence': store_confidence,
-                'used_prompt': str(used_prompt_file),
-                'model': model,
-                'processing_times': {
-                    'ocr': round(ocr_time, 2),
-                    'model': round(model_time, 2),
-                    'total': round(time.time() - processing_start, 2)
-                },
-                'extracted_text_length': len(receipt_text),
-                'processed_at': datetime.now().isoformat()
-            }
-            
-            logger.info(f"Przetworzono paragon w {receipt_data['metadata']['processing_times']['total']:.2f} sekund")
-            return receipt_data
-            
-        except Exception as e:
-            raise ValidationError(f"Błąd podczas wzbogacania danych: {str(e)}")
+        return result
         
     except Exception as e:
         logger.error(f"Błąd podczas przetwarzania paragonu {file_path}: {str(e)}")
@@ -1846,9 +1719,7 @@ def main():
         # Przetwórz paragon
         result = process_receipt(
             file_path=file_path,
-            prompt_file=Path(args.prompt),
-            model=args.model,
-            url=args.url
+            args=args
         )
         
         # Zapisz wynik
