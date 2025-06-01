@@ -1,0 +1,9 @@
+{
+  "dependencies": {
+    "autoprefixer": "^10.4.21",
+    "mini-css-extract-plugin": "^2.9.2",
+    "postcss": "^8.5.4",
+    "postcss-preset-env": "^10.2.0",
+    "tailwindcss": "^4.1.8"
+  }
+}

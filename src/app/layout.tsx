@@ -1,7 +1,13 @@
+'use client';
+
 import type { Metadata } from 'next';
 import { Inter } from 'next/font/google';
 import './globals.css';
-import MainLayout from '@/components/layout/MainLayout';
+import dynamic from 'next/dynamic';
+
+const MainLayout = dynamic(() => import('@/components/layout/MainLayout'), {
+  ssr: false
+});
 
 const inter = Inter({ subsets: ['latin', 'latin-ext'] });
 
