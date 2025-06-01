@@ -1,87 +1,116 @@
-# Skaner Paragonów
+# OCR Manager
 
-Aplikacja do skanowania i zarządzania paragonami z wykorzystaniem OCR. Projekt składa się z backendu w FastAPI i frontendu w React.
+OCR Manager to aplikacja do zarządzania finansami osobistymi i spiżarnią, wykorzystująca technologię OCR do automatycznego przetwarzania paragonów. Aplikacja umożliwia śledzenie wydatków, zarządzanie zapasami domowymi oraz planowanie posiłków.
 
-## Wymagania
+## Funkcje
 
-### Backend
-- Python 3.8+
-- FastAPI
-- Uvicorn
-- (inne zależności znajdują się w requirements.txt)
+- **Przetwarzanie Paragonów**
+  - Automatyczne wyodrębnianie danych z paragonów
+  - Rozpoznawanie produktów, cen i kategorii
+  - Możliwość ręcznej edycji i korekty danych
 
-### Frontend
-- Node.js 16+
-- npm/yarn
-- React 18
-- TypeScript
-- Material-UI
+- **Zarządzanie Finansami**
+  - Śledzenie wydatków według kategorii
+  - Analiza trendów i statystyki
+  - Eksport danych do różnych formatów
+
+- **Zarządzanie Spiżarnią**
+  - Automatyczne aktualizowanie stanu zapasów
+  - Śledzenie produktów mrożonych
+  - Powiadomienia o niskim stanie zapasów
+
+- **Planowanie Posiłków**
+  - Dodawanie i zarządzanie przepisami
+  - Planowanie posiłków w kalendarzu
+  - Generowanie list zakupów
+
+## Wymagania Systemowe
+
+- Node.js 18.0 lub nowszy
+- npm 9.0 lub nowszy
+- Przeglądarka internetowa z obsługą JavaScript
 
 ## Instalacja
 
-### Backend
+1. Sklonuj repozytorium:
+   ```bash
+   git clone https://github.com/twoje-repo/ocr-manager.git
+   cd ocr-manager
+   ```
 
-```bash
-# Klonowanie repozytorium
-git clone [adres-twojego-repo]
-cd [nazwa-folderu]
+2. Zainstaluj zależności:
+   ```bash
+   npm install
+   ```
 
-# Utworzenie i aktywacja środowiska wirtualnego
-python -m venv venv
-source venv/bin/activate  # Linux/macOS
-# lub
-.\venv\Scripts\activate  # Windows
+3. Skonfiguruj zmienne środowiskowe:
+   ```bash
+   cp .env.example .env
+   ```
+   Uzupełnij plik `.env` odpowiednimi wartościami.
 
-# Instalacja zależności
-pip install -r requirements.txt
+4. Uruchom aplikację w trybie deweloperskim:
+   ```bash
+   npm run dev
+   ```
 
-# Uruchomienie serwera deweloperskiego
-uvicorn app.main:app --reload
-```
-
-### Frontend
-
-```bash
-# Przejście do katalogu frontend
-cd frontend
-
-# Instalacja zależności
-npm install
-
-# Uruchomienie serwera deweloperskiego
-npm run dev
-```
-
-## Struktura projektu
+## Struktura Projektu
 
 ```
-.
-├── app/                    # Backend (FastAPI)
-│   ├── main.py            # Główny plik aplikacji
-│   ├── routes/            # Endpointy API
-│   ├── models/            # Modele danych
-│   └── services/          # Logika biznesowa
-│
-├── frontend/              # Frontend (React)
-│   ├── src/
-│   │   ├── components/    # Komponenty React
-│   │   ├── pages/        # Strony aplikacji
-│   │   └── services/     # Integracja z API
-│   └── public/           # Statyczne zasoby
-│
-└── README.md             # Ten plik
+src/
+  ├── app/                    # Strony aplikacji
+  │   ├── dashboard/         # Strona główna
+  │   ├── receipts/         # Zarządzanie paragonami
+  │   ├── pantry/           # Zarządzanie spiżarnią
+  │   ├── cooking/          # Przepisy i planowanie posiłków
+  │   ├── analysis/         # Analiza wydatków
+  │   ├── categories/       # Zarządzanie kategoriami
+  │   ├── settings/         # Ustawienia aplikacji
+  │   └── help/             # Pomoc i FAQ
+  ├── components/            # Komponenty React
+  │   ├── layout/           # Komponenty układu strony
+  │   ├── shared/           # Współdzielone komponenty
+  │   └── [feature]/        # Komponenty specyficzne dla funkcji
+  ├── lib/                   # Biblioteki i narzędzia
+  │   ├── types/            # Definicje TypeScript
+  │   ├── utils/            # Funkcje pomocnicze
+  │   └── api/              # Integracje z API
+  └── styles/               # Style CSS/SCSS
 ```
 
-## Funkcjonalności
+## Konfiguracja OCR
 
-- Logowanie użytkowników
-- Dashboard z wykresami i statystykami
-- Lista paragonów z wyszukiwaniem
-- Szczegóły paragonu z możliwością edycji
-- Zarządzanie kategoriami produktów
-- Widok stanu magazynowego
-- Responsywny interfejs użytkownika
+Aplikacja wykorzystuje technologię OCR do przetwarzania paragonów. Domyślnie skonfigurowana jest do rozpoznawania polskich paragonów, ale można dostosować ustawienia w panelu administracyjnym:
+
+- Język rozpoznawania: Polski
+- Automatyczna poprawa jakości obrazu
+- Automatyczne obracanie obrazu
+- Próg pewności rozpoznawania: 80%
+
+## Rozwój
+
+1. Utwórz nową gałąź dla swojej funkcji:
+   ```bash
+   git checkout -b feature/nazwa-funkcji
+   ```
+
+2. Wprowadź zmiany i przetestuj:
+   ```bash
+   npm run test
+   ```
+
+3. Wypchnij zmiany:
+   ```bash
+   git push origin feature/nazwa-funkcji
+   ```
 
 ## Licencja
 
-[Twoja licencja] 
+Ten projekt jest licencjonowany na warunkach licencji MIT. Szczegółowe informacje znajdują się w pliku [LICENSE](LICENSE).
+
+## Wsparcie
+
+W razie problemów lub pytań:
+- Sprawdź sekcję FAQ w aplikacji
+- Skontaktuj się z nami: pomoc@ocrmanager.pl
+- Godziny wsparcia: Pon-Pt 9:00 - 17:00 

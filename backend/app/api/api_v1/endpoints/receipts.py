@@ -1,9 +1,10 @@
 from typing import Any, List, Optional
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File
 from sqlalchemy.orm import Session
 from app.api import deps
 from app.schemas.receipt import Receipt, ReceiptCreate, ReceiptUpdate, ReceiptList
 from app.crud import crud_receipt
+from app.core.ocr import process_receipt_image
 
 router = APIRouter()
 
@@ -90,4 +91,31 @@ def delete_receipt(
     if not receipt:
         raise HTTPException(status_code=404, detail="Receipt not found")
     crud_receipt.remove(db=db, id=receipt_id)
-    return {"status": "success", "message": "Receipt deleted"} 
+    return {"status": "success", "message": "Receipt deleted"}
+
+@router.post("/process-image/", response_model=Receipt)
+async def process_receipt_image(
+    *,
+    db: Session = Depends(deps.get_db),
+    file: UploadFile = File(...),
+) -> Any:
+    """
+    Process receipt image with OCR and create a new receipt entry.
+    """
+    try:
+        # Read image file
+        contents = await file.read()
+        
+        # Process image with OCR
+        receipt_data = await process_receipt_image(contents)
+        
+        # Create receipt in database
+        receipt_in = ReceiptCreate(**receipt_data)
+        receipt = crud_receipt.create(db=db, obj_in=receipt_in)
+        
+        return receipt
+    except Exception as e:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Failed to process receipt image: {str(e)}"
+        ) 
