@@ -13,11 +13,11 @@ echo "Budowanie aplikacji Next.js..."
 npm run build
 
 # Uruchomienie aplikacji
-echo "Uruchamianie aplikacji..."
-python3 process_receipt.py & # Uruchomienie backendu OCR w tle
-npm run dev # Uruchomienie frontendu w trybie deweloperskim
+echo "Uruchamianie frontendu w trybie deweloperskim..."
+npm run dev
 
-# Aby zatrzymać wszystkie procesy, użyj: pkill -f "python3 process_receipt.py" && pkill -f "npm run dev"
+# Aby uruchomić backend OCR, użyj w osobnym terminalu:
+# python3 process_receipt.py <ścieżka_do_paragonu>
 
 # Konfiguracja Nginx
 sudo cp nginx.conf /etc/nginx/sites-available/ocr-manager
