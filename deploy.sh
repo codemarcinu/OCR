@@ -1,19 +1,23 @@
 #!/bin/bash
 
-# Instalacja zależności
+# Instalacja zależności Python
+echo "Instalacja zależności Python..."
+pip install -r requirements.txt
+
+# Instalacja zależności Node.js
+echo "Instalacja zależności Node.js..."
 npm install
 
-# Budowanie aplikacji
+# Budowanie aplikacji Next.js
+echo "Budowanie aplikacji Next.js..."
 npm run build
 
-# Instalacja PM2 (jeśli nie jest zainstalowany)
-if ! command -v pm2 &> /dev/null; then
-    npm install -g pm2
-fi
+# Uruchomienie aplikacji
+echo "Uruchamianie aplikacji..."
+python3 process_receipt.py & # Uruchomienie backendu OCR w tle
+npm run dev # Uruchomienie frontendu w trybie deweloperskim
 
-# Uruchomienie aplikacji przez PM2
-pm2 delete ocr-manager || true
-pm2 start npm --name "ocr-manager" -- start
+# Aby zatrzymać wszystkie procesy, użyj: pkill -f "python3 process_receipt.py" && pkill -f "npm run dev"
 
 # Konfiguracja Nginx
 sudo cp nginx.conf /etc/nginx/sites-available/ocr-manager
