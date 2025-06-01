@@ -5,5 +5,10 @@
     "postcss": "^8.5.4",
     "postcss-preset-env": "^10.2.0",
     "tailwindcss": "^4.1.8"
+  },
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start -p 3000"
   }
 }
